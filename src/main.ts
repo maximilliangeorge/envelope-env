@@ -4,7 +4,6 @@ import dotenv from 'dotenv'
 import { defineCommand, renderUsage } from 'citty'
 import { version } from '../package.json'
 import { createConsola } from 'consola'
-import child_process from 'child_process'
 
 export const log = createConsola({
   level: 3,
@@ -81,16 +80,21 @@ function getCompiledEnv(env: string, opts?: { silent: boolean }) {
   envVars += `ENVELOPE_ENV=${env}\n`
   envVars += `ENVELOPE_DIR=${envDir}\n`
 
-  if (fs.existsSync(commonEnvPath)) {
-    if (opts?.silent !== true)
-      log.info(`reading common environment variables from ${commonEnvPath}`)
-    envVars += fs.readFileSync(commonEnvPath, 'utf-8')
-  }
+  // Add error handling for file read operations
+  try {
+    if (fs.existsSync(commonEnvPath)) {
+      if (opts?.silent !== true)
+        log.info(`Reading common environment variables from ${commonEnvPath}`)
+      envVars += fs.readFileSync(commonEnvPath, 'utf-8')
+    }
 
-  if (fs.existsSync(envEnvPath)) {
-    if (opts?.silent !== true)
-      log.info(`reading environment variables from ${envEnvPath}`)
-    envVars += '\n' + fs.readFileSync(envEnvPath, 'utf-8')
+    if (fs.existsSync(envEnvPath)) {
+      if (opts?.silent !== true)
+        log.info(`Reading environment variables from ${envEnvPath}`)
+      envVars += '\n' + fs.readFileSync(envEnvPath, 'utf-8')
+    }
+  } catch (error) {
+    throw new Error(`Error reading environment files: ${error.message}`)
   }
 
   validateEnvString(envVars)
@@ -99,44 +103,18 @@ function getCompiledEnv(env: string, opts?: { silent: boolean }) {
 }
 
 /**
- * Get the environment details for the given environment
+ * Get the .env for the given environment
  * @param env - The environment name
  */
 
-function getEnvDetails(env: string) {
-  const compiledEnv = getCompiledEnv(env)
+function compileDotEnv(env: string, silent: boolean) {
+  const compiledEnv = getCompiledEnv(env, {
+    silent
+  })
 
   return Object.entries(compiledEnv)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')
-}
-
-/**
- * Apply the environment variables to the current process
- * @param env - The environment name
- */
-
-function applyEnv(env: string) {
-  const compiledEnv = getCompiledEnv(env)
-
-  Object.entries(compiledEnv).forEach(([key, value]) => {
-    process.env[key] = value
-  })
-}
-
-/**
- * Prints the environment variables as `export $var` to the current shell
- * @param env - The environment name
- */
-
-function loadEnv(env: string) {
-  const compiledEnv = getCompiledEnv(env, {
-    silent: true
-  })
-
-  Object.entries(compiledEnv).forEach(([key, value]) => {
-    console.log(`export ${key}=${value}`)
-  })
 }
 
 /**
@@ -150,80 +128,90 @@ export const main = defineCommand({
     description: '📨'
   },
   subCommands: {
-    use: defineCommand({
-      meta: {
-        name: 'use',
-        description: 'use an environment'
-      },
-      args: {
-        environment: {
-          type: 'positional',
-          description: 'the environment name'
-        }
-      },
-      async run({ args }) {
-        try {
-          applyEnv(args.environment as string)
-          log.success(`Using environment: ${args.environment}`)
-        } catch (error) {
-          log.error(error)
-        }
-      }
-    }),
-    load: defineCommand({
-      meta: {
-        name: 'load',
-        description: 'load environment variables'
-      },
-      args: {
-        environment: {
-          type: 'positional',
-          description: 'the environment name'
-        }
-      },
-      async run({ args }) {
-        loadEnv(args.environment as string)
-      }
-    }),
     get: defineCommand({
       meta: {
         name: 'get',
-        description: 'print environment details'
+        description: 'Print environment variables to console'
       },
       args: {
+        silent: {
+          type: 'boolean',
+          description: 'Do not log status messages',
+          alias: ['s']
+        },
         environment: {
           type: 'positional',
-          description: 'the environment name',
-          required: false
+          description: 'The environment name',
+          required: true
         }
       },
       async run({ args }) {
-        let env = args.environment || process.env.ENVELOPE_ENV
-
-        if (env === undefined) {
-          const usage = await renderUsage(this)
-          return log.info(usage)
-        }
-
         try {
-          log.info(`compiling environment variables for ${args.environment}`)
-          const details = getEnvDetails(args.environment as string)
-          log.success(
-            `successfully compiled environment variables for ${args.environment}:`
-          )
-          log.log(details)
+          const silent = !!args.silent
+          const env = compileDotEnv(args.environment as string, silent)
+          log.box(env)
         } catch (error) {
-          log.error(error)
+          log.error(`Error in 'get' command: ${error.message}`)
+          process.exit(1)
+        }
+      }
+    }),
+    use: defineCommand({
+      meta: {
+        name: 'use',
+        description: 'Compile a .env file for the given environment'
+      },
+      args: {
+        silent: {
+          type: 'boolean',
+          description: 'Do not log status messages',
+          alias: ['s']
+        },
+        environment: {
+          type: 'positional',
+          description: 'The environment name',
+          required: true
+        }
+      },
+      async run({ args }) {
+        const silent = !!args.silent
+        try {
+          if (!silent)
+            log.info(`Compiling environment variables for ${args.environment}`)
+          const env = compileDotEnv(args.environment as string, silent)
+          if (!silent)
+            log.success(
+              `Compiled environment variables for ${
+                args.environment
+              }: to ${process.cwd()}/.env`
+            )
+          fs.writeFileSync(path.join(process.cwd(), '.env'), env, 'utf-8')
+        } catch (error) {
+          if (!silent) log.error(error)
+          process.exit(1)
         }
       }
     }),
     list: defineCommand({
       meta: {
         name: 'list',
-        description: 'list all dev environment variables'
+        description: 'List all available environments'
       },
       run() {
-        console.log('Listing all dev environment variables')
+        try {
+          const confDir = getConfDir()
+          const environments = fs
+            .readdirSync(confDir, { withFileTypes: true })
+            .filter(
+              (dirent) => dirent.isDirectory() && dirent.name !== 'node_modules'
+            )
+            .map((dirent) => dirent.name)
+
+          log.info('Available environments: ' + environments.join(', '))
+        } catch (error) {
+          log.error(`Error listing environments: ${error.message}`)
+          process.exit(1)
+        }
       }
     })
   },
