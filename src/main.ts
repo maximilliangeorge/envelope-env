@@ -1,5 +1,5 @@
-import fs from 'fs'
-import path from 'path'
+import fs from 'node:fs'
+import path from 'node:path'
 import dotenv from 'dotenv'
 import { defineCommand, renderUsage } from 'citty'
 import { version } from '../package.json'
@@ -11,16 +11,16 @@ export const log = createConsola({
 })
 
 /**
- * Get the config directory inside the current working directory
- * @returns The absolute path to the config directory
+ * Get the root directory which contains the config directory
+ * @returns The absolute path to the root directory
  */
 
-function getConfDir() {
+function getRootDir() {
   let currentDir = process.cwd()
   while (true) {
-    const configDir = path.join(currentDir, 'config')
+    const configDir = path.join(currentDir, 'env')
     if (fs.existsSync(configDir) && fs.statSync(configDir).isDirectory()) {
-      return configDir
+      return currentDir
     }
     const parentDir = path.dirname(currentDir)
     if (parentDir === currentDir) {
@@ -31,18 +31,29 @@ function getConfDir() {
 }
 
 /**
+ * Get the config directory inside the current working directory
+ * @returns The absolute path to the config directory
+ */
+
+function getRootEnvDir() {
+  const rootDir = getRootDir()
+  return path.join(rootDir, 'env')
+}
+
+/**
  * Get the environment directory for the given environment
  * @param env - The environment name
  * @returns The environment directory
  */
 
 function getEnvDir(env: string) {
-  const confDir = getConfDir()
+  const rootEnvDir = getRootEnvDir()
+  const envDir = path.join(rootEnvDir, env)
 
-  const envDir = path.join(confDir, env)
   if (fs.existsSync(envDir) && fs.statSync(envDir).isDirectory()) {
     return envDir
   }
+
   throw new Error(`Could not find directory ${envDir}`)
 }
 
@@ -68,33 +79,29 @@ function validateEnvString(envVars: string) {
 
 /**
  * Compile the environment variables
+ * TODO: perhaps needs to harmonise with merge options
  */
 
-function getCompiledEnv(env: string, opts?: { silent: boolean }) {
+async function getCompiledEnv(env: string, opts?: { silent: boolean }) {
   const envDir = getEnvDir(env)
-  const confDir = getConfDir()
-  const commonEnvPath = path.join(confDir, '.env')
-  const envEnvPath = path.join(envDir, '.env')
+  const rootEnvDir = getRootEnvDir()
 
   let envVars = ''
   envVars += `ENVELOPE_ENV=${env}\n`
   envVars += `ENVELOPE_DIR=${envDir}\n`
 
-  // Add error handling for file read operations
-  try {
-    if (fs.existsSync(commonEnvPath)) {
-      if (opts?.silent !== true)
-        log.info(`Reading common environment variables from ${commonEnvPath}`)
-      envVars += fs.readFileSync(commonEnvPath, 'utf-8')
-    }
+  // Handle .env files
+  const envFiles = [
+    { path: path.join(rootEnvDir, '.env'), name: 'common' },
+    { path: path.join(envDir, '.env'), name: env }
+  ]
 
-    if (fs.existsSync(envEnvPath)) {
+  for (const file of envFiles) {
+    if (fs.existsSync(file.path)) {
       if (opts?.silent !== true)
-        log.info(`Reading environment variables from ${envEnvPath}`)
-      envVars += '\n' + fs.readFileSync(envEnvPath, 'utf-8')
+        log.info(`Reading ${file.name} environment variables from ${file.path}`)
+      envVars += '\n' + fs.readFileSync(file.path, 'utf-8')
     }
-  } catch (error) {
-    throw new Error(`Error reading environment files: ${error.message}`)
   }
 
   validateEnvString(envVars)
@@ -107,8 +114,8 @@ function getCompiledEnv(env: string, opts?: { silent: boolean }) {
  * @param env - The environment name
  */
 
-function compileDotEnv(env: string, silent: boolean) {
-  const compiledEnv = getCompiledEnv(env, {
+async function compileDotEnv(env: string, silent: boolean) {
+  const compiledEnv = await getCompiledEnv(env, {
     silent
   })
 
@@ -148,11 +155,11 @@ export const main = defineCommand({
       async run({ args }) {
         try {
           const silent = !!args.silent
-          const env = compileDotEnv(args.environment as string, silent)
+          const env = await compileDotEnv(args.environment as string, silent)
           log.box(env)
         } catch (error) {
           log.error(`Error in 'get' command: ${error.message}`)
-          process.exit(1)
+          // process.exit(1)
         }
       }
     }),
@@ -176,16 +183,20 @@ export const main = defineCommand({
       async run({ args }) {
         const silent = !!args.silent
         try {
-          if (!silent)
+          if (!silent) {
             log.info(`Compiling environment variables for ${args.environment}`)
-          const env = compileDotEnv(args.environment as string, silent)
-          if (!silent)
+          }
+
+          const env = await compileDotEnv(args.environment as string, silent)
+          const rootDir = getRootDir()
+
+          if (!silent) {
             log.success(
-              `Compiled environment variables for ${
-                args.environment
-              }: to ${process.cwd()}/.env`
+              `Compiled environment variables for ${args.environment}: to ${rootDir}/.env` // TODO: this is not correct
             )
-          fs.writeFileSync(path.join(process.cwd(), '.env'), env, 'utf-8')
+          }
+
+          fs.writeFileSync(path.join(rootDir, '.env'), env, 'utf-8')
         } catch (error) {
           if (!silent) log.error(error)
           process.exit(1)
@@ -199,9 +210,9 @@ export const main = defineCommand({
       },
       run() {
         try {
-          const confDir = getConfDir()
+          const rootEnvDir = getRootEnvDir()
           const environments = fs
-            .readdirSync(confDir, { withFileTypes: true })
+            .readdirSync(rootEnvDir, { withFileTypes: true })
             .filter(
               (dirent) => dirent.isDirectory() && dirent.name !== 'node_modules'
             )
