@@ -36,7 +36,7 @@ your-project/
 │   └── some-custom-env/
 │       └── .env            # Production-specific variables
 ├── .env                    # Compiled by running `envelope use <environment name>`
-└── package.json
+└── ...
 ```
 
 Alternatively you can use the `.env.<name>` syntax:
@@ -50,10 +50,8 @@ your-project/
 │   ├── .env.production      # Production environment
 │   └── .env.some-custom-env # Production environment
 ├── .env                     # Compiled by running `envelope use <environment name>`
-└── package.json
+└── ...
 ```
-
-````
 
 ## Usage
 
@@ -65,7 +63,7 @@ List all available environments in your project.
 
 ```bash
 envelope list
-````
+```
 
 **Output:**
 
@@ -150,13 +148,6 @@ DEBUG=true
 COMPLEX_VALUE="This is a complex value with spaces"
 ```
 
-## How It Works
-
-1. **Discovery**: Envelope automatically finds your project root by looking for an `env/` directory
-2. **Compilation**: Combines common variables (`env/.env`) with environment-specific variables (`env/<environment>/.env`)
-3. **Validation**: Ensures all environment variables are properly formatted
-4. **Output**: Generates a single `.env` file or displays variables in the console
-
 ## Environment Variable Precedence
 
 When compiling environment variables, Envelope follows this order:
@@ -166,14 +157,6 @@ When compiling environment variables, Envelope follows this order:
 3. **Environment-specific variables** - From `env/<environment>/.env`
 
 Environment-specific variables will override common variables with the same name.
-
-## Error Handling
-
-Envelope provides clear error messages for common issues:
-
-- **Missing environment directory**: `Could not find directory /path/to/env/environment`
-- **Invalid .env format**: `invalid .env format at line X: content`
-- **Missing config directory**: `Could not find env directory`
 
 ## Development
 
@@ -205,8 +188,4 @@ npm test
 
 ## License
 
-ISC
-
-## Support
-
-If you encounter any issues or have questions, please open an issue on the GitHub repository.
+WTFPL
