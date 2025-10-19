@@ -17,9 +17,11 @@ beforeEach(() => {
   fs.mkdirSync('/env')
   fs.mkdirSync('/env/develop')
   fs.mkdirSync('/env/main')
+  logSpy.mockClear()
+  cwdSpy.mockClear()
 })
 
-it('should list available environments', async () => {
+it('`envelope list` should list available environments', async () => {
   fs.mkdirSync('/env/staging')
 
   await runMain(main, {
@@ -31,7 +33,7 @@ it('should list available environments', async () => {
   )
 })
 
-it('should compile a .env file', async () => {
+it('`envelope use` should compile a .env file', async () => {
   fs.writeFileSync('/env/.env', 'FOO=FOO')
   fs.writeFileSync('/env/develop/.env', 'FOO=BAR')
 
@@ -48,7 +50,7 @@ it('should compile a .env file', async () => {
   `)
 })
 
-it('should compile the .env file into the root directory, even when called from a child directory', async () => {
+it('`envelope use` should compile the .env file into the root directory, even when called from a child directory', async () => {
   cwdSpy.mockReturnValue('/child')
 
   fs.writeFileSync('/env/.env', 'FOO=FOO')
@@ -72,3 +74,19 @@ it('should compile the .env file into the root directory, even when called from 
     FOO=BAR"
   `)
 })
+
+it('`envelope current` should return the name of the current environment', async () => {
+  await runMain(main, {
+    rawArgs: ['use', 'develop']
+  })
+
+  await runMain(main, {
+    rawArgs: ['current']
+  })
+
+  expect(logSpy.mock.calls[1][0]).toMatchInlineSnapshot(
+    `"The current environment is: develop"`
+  )
+})
+
+it.todo('`envelope get` should return the current env vars if no argument')

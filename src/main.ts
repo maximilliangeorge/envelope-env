@@ -24,7 +24,7 @@ function getRootDir() {
     }
     const parentDir = path.dirname(currentDir)
     if (parentDir === currentDir) {
-      throw new Error('Could not find config directory')
+      throw new Error('Could not find env directory')
     }
     currentDir = parentDir
   }
@@ -221,6 +221,37 @@ export const main = defineCommand({
           log.info('Available environments: ' + environments.join(', '))
         } catch (error) {
           log.error(`Error listing environments: ${error.message}`)
+          process.exit(1)
+        }
+      }
+    }),
+    current: defineCommand({
+      meta: {
+        name: 'current',
+        description: 'Print current environment'
+      },
+      run() {
+        try {
+          const rootDir = getRootDir()
+          const envFilePath = path.join(rootDir, '.env')
+
+          if (!fs.existsSync(envFilePath)) {
+            throw new Error('Oopsie')
+          }
+
+          const envString = fs.readFileSync(envFilePath, 'utf-8')
+
+          validateEnvString(envString)
+
+          const parsed = dotenv.parse(envString)
+
+          if (!parsed.ENVELOPE_ENV) {
+            throw new Error('Could not parse ENVELOPE_ENV')
+          }
+
+          log.info(`The current environment is: ${parsed.ENVELOPE_ENV}`)
+        } catch (error) {
+          log.error(`Error getting current environment: ${error.message}`)
           process.exit(1)
         }
       }
