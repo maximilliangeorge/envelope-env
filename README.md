@@ -1,13 +1,13 @@
 # Envelope 📨
 
-Envelope is a CLI tool that compiles a `.env` from a set of
+Envelope is a CLI tool that compiles a `.env` file from a set of environment-specific configurations. Organise your environment variables in an `env/` directory and switch between them by name.
 
 ## Installation
 
 ### Global Installation
 
 ```bash
-npm install -g envelope
+npm install -g envelope-env
 ```
 
 ### Local Development
@@ -21,35 +21,34 @@ npm run build
 
 ## Project Structure
 
-Envelope expects your project to have the following structure:
+Envelope expects your project to have an `env/` directory containing your environment configurations. Two layouts are supported, but they cannot be mixed in the same project.
+
+### Directory Mode
 
 ```
 your-project/
-├── env/                    # Environment configuration directory
-│   ├── .env                # Common environment variables (shared across all envs)
+├── env/
+│   ├── .env                # Common variables (shared across all envs)
 │   ├── development/
 │   │   └── .env            # Development-specific variables
 │   ├── staging/
 │   │   └── .env            # Staging-specific variables
-│   ├── production/
-│   │   └── .env            # Production-specific variables
-│   └── some-custom-env/
+│   └── production/
 │       └── .env            # Production-specific variables
-├── .env                    # Compiled by running `envelope use <environment name>`
+├── .env                    # Compiled by running `envelope use <environment>`
 └── ...
 ```
 
-Alternatively you can use the `.env.<name>` syntax:
+### Flat Mode
 
 ```
 your-project/
-├── env/                     # Environment configuration directory
-│   ├── .env                 # Common environment variables (shared across all envs)
+├── env/
+│   ├── .env                 # Common variables (shared across all envs)
 │   ├── .env.development     # Development-specific variables
-│   ├── .env.staging         # Staging environment
-│   ├── .env.production      # Production environment
-│   └── .env.some-custom-env # Production environment
-├── .env                     # Compiled by running `envelope use <environment name>`
+│   ├── .env.staging         # Staging-specific variables
+│   └── .env.production      # Production-specific variables
+├── .env                     # Compiled by running `envelope use <environment>`
 └── ...
 ```
 
@@ -96,6 +95,14 @@ envelope use production --silent
 **Options:**
 
 - `--silent, -s` - Suppress status messages
+
+#### `envelope current`
+
+Print the currently active environment (reads `ENVELOPE_ENV` from the compiled `.env` file).
+
+```bash
+envelope current
+```
 
 ### Examples
 
@@ -152,9 +159,9 @@ COMPLEX_VALUE="This is a complex value with spaces"
 
 When compiling environment variables, Envelope follows this order:
 
-1. **Base variables** - `ENVELOPE_ENV` and `ENVELOPE_DIR` are always set
+1. **Base variables** - `ENVELOPE_ENV` and `ENVELOPE_DIR` are always set automatically
 2. **Common variables** - From `env/.env` (if it exists)
-3. **Environment-specific variables** - From `env/<environment>/.env`
+3. **Environment-specific variables** - From `env/<environment>/.env` or `env/.env.<environment>`
 
 Environment-specific variables will override common variables with the same name.
 
@@ -188,4 +195,4 @@ npm test
 
 ## License
 
-WTFPL
+[WTFPL](https://www.wtfpl.net/)
