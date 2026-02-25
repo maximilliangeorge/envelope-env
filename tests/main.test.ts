@@ -89,4 +89,67 @@ it('`envelope current` should return the name of the current environment', async
   )
 })
 
+it('`envelope use` should compile a .env file in flat mode', async () => {
+  vol.reset()
+  fs.mkdirSync('/env')
+  fs.writeFileSync('/env/.env', 'FOO=FOO')
+  fs.writeFileSync('/env/.env.prod', 'FOO=BAR')
+
+  await runMain(main, {
+    rawArgs: ['use', 'prod']
+  })
+
+  const env = fs.readFileSync('/.env', 'utf-8')
+
+  expect(env).toMatchInlineSnapshot(`
+    "ENVELOPE_ENV=prod
+    ENVELOPE_DIR=/env
+    FOO=BAR"
+  `)
+})
+
+it('`envelope list` should list flat-file environments', async () => {
+  vol.reset()
+  fs.mkdirSync('/env')
+  fs.writeFileSync('/env/.env.prod', 'FOO=BAR')
+  fs.writeFileSync('/env/.env.staging', 'FOO=BAZ')
+
+  await runMain(main, {
+    rawArgs: ['list']
+  })
+
+  expect(logSpy.mock.calls[0][0]).toMatchInlineSnapshot(
+    `"Available environments: prod, staging"`
+  )
+})
+
+it('should error when directory mode and flat mode are mixed', async () => {
+  // beforeEach already created /env/develop and /env/main (directory mode)
+  fs.writeFileSync('/env/.env.prod', 'FOO=BAR') // flat mode file
+
+  const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => {})
+
+  await runMain(main, { rawArgs: ['get', 'develop'] })
+
+  expect(errorSpy.mock.calls[0][0]).toMatch(/Incompatible environment modes/)
+  expect(errorSpy.mock.calls[0][0]).toMatch(/directory mode/)
+  expect(errorSpy.mock.calls[0][0]).toMatch(/flat mode/)
+
+  errorSpy.mockRestore()
+})
+
+it('`envelope list` should error when directory mode and flat mode are mixed', async () => {
+  fs.writeFileSync('/env/.env.prod', 'FOO=BAR')
+
+  const errorSpy = vi.spyOn(log, 'error').mockImplementation(() => {})
+  const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never)
+
+  await runMain(main, { rawArgs: ['list'] })
+
+  expect(errorSpy.mock.calls[0][0]).toMatch(/Incompatible environment modes/)
+
+  errorSpy.mockRestore()
+  exitSpy.mockRestore()
+})
+
 it.todo('`envelope get` should return the current env vars if no argument')
