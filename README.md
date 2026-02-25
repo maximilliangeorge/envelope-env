@@ -10,13 +10,10 @@ Envelope is a CLI tool that compiles a `.env` file from a set of environment-spe
 npm install -g envelope-env
 ```
 
-### Local Development
+### Usage
 
 ```bash
-git clone <repository-url>
-cd envelope-node
-npm install
-npm run build
+envelope use <environment>
 ```
 
 ## Project Structure
