@@ -24,12 +24,16 @@ Envelope expects your project to have an `env/` directory containing one subdire
 your-project/
 ├── env/
 │   ├── .env                # Common variables (shared across all envs)
+│   ├── pre                 # Optional: runs before every switch
+│   ├── post                # Optional: runs after every switch
 │   ├── development/
 │   │   └── .env            # Development-specific variables
 │   ├── staging/
-│   │   └── .env            # Staging-specific variables
+│   │   ├── .env            # Staging-specific variables
+│   │   └── post            # Optional: runs after switching to staging
 │   └── production/
-│       └── .env            # Production-specific variables
+│       ├── .env            # Production-specific variables
+│       └── pre             # Optional: runs before switching to production
 ├── .env                    # Compiled by running `envelope use <environment>`
 └── ...
 ```
@@ -72,11 +76,13 @@ Compile and write environment variables for a specific environment to your proje
 ```bash
 envelope use development
 envelope use production --silent
+envelope use production --no-hooks
 ```
 
 **Options:**
 
 - `--silent, -s` - Suppress status messages
+- `--no-hooks` - Skip pre and post hooks
 
 #### `envelope current`
 
@@ -120,6 +126,36 @@ envelope get development
 # View production environment variables silently
 envelope get production --silent
 ```
+
+## Hooks
+
+Envelope can run shell scripts before and after `envelope use` writes the compiled `.env` file. Hooks are plain files named `pre` or `post`, run with `sh`, so they do not need to be executable.
+
+| Location                | When it runs                                |
+| ----------------------- | ------------------------------------------- |
+| `env/pre`               | Before every switch                         |
+| `env/<environment>/pre` | Before switching to `<environment>`         |
+| `env/post`              | After every switch                          |
+| `env/<environment>/post`| After switching to `<environment>`          |
+
+Common hooks run before environment-specific ones. The full order is: common `pre`, environment `pre`, write `.env`, common `post`, environment `post`.
+
+Hooks run from the project root with the compiled environment variables available in their environment, including `ENVELOPE_ENV`. If a `.env` file already existed, `ENVELOPE_PREVIOUS_ENV` is set to the environment it was compiled for.
+
+```bash
+# env/post
+docker compose up -d --force-recreate
+npx prisma generate
+```
+
+```bash
+# env/production/pre
+if [ "$ENVELOPE_PREVIOUS_ENV" != "production" ]; then
+  echo "Switching from $ENVELOPE_PREVIOUS_ENV to production"
+fi
+```
+
+If a `pre` hook exits with a non-zero status, `.env` is not written and `envelope` exits with status 1. If a `post` hook fails, `.env` has already been written and `envelope` exits with status 1 after reporting the failure. Pass `--no-hooks` to skip hooks entirely.
 
 ## Environment File Format
 

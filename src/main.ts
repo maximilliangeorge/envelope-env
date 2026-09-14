@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
 import dotenv from 'dotenv'
 import { defineCommand, renderUsage } from 'citty'
 import { version } from '../package.json'
@@ -100,14 +101,74 @@ async function getCompiledEnv(env: string, opts?: { silent: boolean }) {
  * @param env - The environment name
  */
 
-async function compileDotEnv(env: string, silent: boolean) {
-  const compiledEnv = await getCompiledEnv(env, {
-    silent
-  })
-
+function formatEnv(compiledEnv: Record<string, string>) {
   return Object.entries(compiledEnv)
     .map(([key, value]) => `${key}=${value}`)
     .join('\n')
+}
+
+async function compileDotEnv(env: string, silent: boolean) {
+  return formatEnv(await getCompiledEnv(env, { silent }))
+}
+
+/**
+ * Read ENVELOPE_ENV from the currently compiled .env, if there is one
+ * @param rootDir - The project root directory
+ */
+
+function getCurrentEnv(rootDir: string): string | undefined {
+  const envFilePath = path.join(rootDir, '.env')
+  if (!fs.existsSync(envFilePath)) return undefined
+  try {
+    return dotenv.parse(fs.readFileSync(envFilePath, 'utf-8')).ENVELOPE_ENV
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Resolve the hook scripts to run for a given stage. Common hooks in `env/`
+ * run first, followed by environment-specific hooks in `env/<environment>/`.
+ * @param stage - 'pre' or 'post'
+ * @param env - The environment name
+ */
+
+function getHooks(stage: 'pre' | 'post', env: string) {
+  const rootEnvDir = getRootEnvDir()
+  return [path.join(rootEnvDir, stage), path.join(rootEnvDir, env, stage)].filter(
+    (p) => fs.existsSync(p) && fs.statSync(p).isFile()
+  )
+}
+
+/**
+ * Run a hook script with the compiled environment injected
+ * @param hookPath - The absolute path to the hook script
+ * @param hookEnv - Environment variables to expose to the script
+ * @param rootDir - The working directory for the script
+ * @param silent - Suppress the script's stdout
+ */
+
+function runHook(
+  hookPath: string,
+  hookEnv: Record<string, string>,
+  rootDir: string,
+  silent: boolean
+) {
+  if (!silent) log.info(`Running hook ${hookPath}`)
+
+  const result = spawnSync('sh', [hookPath], {
+    cwd: rootDir,
+    stdio: ['inherit', silent ? 'ignore' : 'inherit', 'inherit'],
+    env: { ...process.env, ...hookEnv }
+  })
+
+  if (result.error) {
+    throw new Error(`Hook ${hookPath} could not be run: ${result.error.message}`)
+  }
+
+  if (result.status !== 0) {
+    throw new Error(`Hook ${hookPath} exited with status ${result.status}`)
+  }
 }
 
 /**
@@ -160,6 +221,11 @@ export const main = defineCommand({
           description: 'Do not log status messages',
           alias: ['s']
         },
+        hooks: {
+          type: 'boolean',
+          description: 'Run pre and post hooks (disable with --no-hooks)',
+          default: true
+        },
         environment: {
           type: 'positional',
           description: 'The environment name',
@@ -168,23 +234,49 @@ export const main = defineCommand({
       },
       async run({ args }) {
         const silent = !!args.silent
+        const environment = args.environment as string
+        let written = false
+
         try {
           if (!silent) {
-            log.info(`Compiling environment variables for ${args.environment}`)
+            log.info(`Compiling environment variables for ${environment}`)
           }
 
-          const env = await compileDotEnv(args.environment as string, silent)
+          const compiledEnv = await getCompiledEnv(environment, { silent })
           const rootDir = getRootDir()
+          const envFilePath = path.join(rootDir, '.env')
+
+          const previousEnv = getCurrentEnv(rootDir)
+          const hookEnv = {
+            ...compiledEnv,
+            ...(previousEnv ? { ENVELOPE_PREVIOUS_ENV: previousEnv } : {})
+          }
+
+          if (args.hooks) {
+            for (const hook of getHooks('pre', environment)) {
+              runHook(hook, hookEnv, rootDir, silent)
+            }
+          }
+
+          fs.writeFileSync(envFilePath, formatEnv(compiledEnv), 'utf-8')
+          written = true
+
+          if (args.hooks) {
+            for (const hook of getHooks('post', environment)) {
+              runHook(hook, hookEnv, rootDir, silent)
+            }
+          }
 
           if (!silent) {
             log.success(
-              `Compiled environment variables for ${args.environment}: to ${rootDir}/.env` // TODO: this is not correct
+              `Compiled environment variables for ${environment} to ${envFilePath}`
             )
           }
-
-          fs.writeFileSync(path.join(rootDir, '.env'), env, 'utf-8')
         } catch (error) {
-          if (!silent) log.error(error)
+          if (written) {
+            log.error(`.env was written for ${environment} but a post hook failed`)
+          }
+          log.error(error.message)
           process.exit(1)
         }
       }
