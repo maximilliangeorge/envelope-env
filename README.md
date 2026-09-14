@@ -1,6 +1,6 @@
 # Envelope 📨
 
-Envelope is a CLI tool that compiles a `.env` file from a set of environment-specific configurations. Organise your environment variables in an `env/` directory and switch between them by name.
+Envelope is a CLI tool that compiles a `.env` file from a set of environment-specific configurations. Organise your environment variables in an `env/` directory, switch between them by name, and optionally run `pre` and `post` hooks on every switch.
 
 ## Installation
 
@@ -182,6 +182,14 @@ When compiling environment variables, Envelope follows this order:
 3. **Environment-specific variables** - From `env/<environment>/.env`
 
 Environment-specific variables will override common variables with the same name.
+
+## Migrating from 1.x
+
+Version 2.0 removes flat mode. Files named `env/.env.<environment>` are no longer recognised; every environment must be a directory containing a `.env` file. To migrate, move each flat file into its own directory:
+
+```bash
+mkdir env/staging && mv env/.env.staging env/staging/.env
+```
 
 ## Development
 
