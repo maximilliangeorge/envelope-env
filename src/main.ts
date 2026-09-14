@@ -61,51 +61,17 @@ function validateEnvString(envVars: string) {
 }
 
 /**
- * Throws if both directory-mode subdirectories and flat-mode .env.* files are
- * present in the same env directory, since the two layouts are incompatible.
- */
-
-function assertSingleEnvMode(rootEnvDir: string) {
-  const entries = fs.readdirSync(rootEnvDir, { withFileTypes: true })
-  const hasSubdirs = entries.some(
-    (e) => e.isDirectory() && e.name !== 'node_modules'
-  )
-  const hasFlatFiles = entries.some(
-    (e) => e.isFile() && /^\.env\../.test(e.name)
-  )
-
-  if (hasSubdirs && hasFlatFiles) {
-    throw new Error(
-      `Incompatible environment modes detected in '${rootEnvDir}': ` +
-        `found both subdirectories (directory mode) and .env.* files (flat mode). ` +
-        `Use one layout or the other, not both.`
-    )
-  }
-}
-
-/**
  * Compile the environment variables
  * TODO: perhaps needs to harmonise with merge options
  */
 
 async function getCompiledEnv(env: string, opts?: { silent: boolean }) {
   const rootEnvDir = getRootEnvDir()
-  assertSingleEnvMode(rootEnvDir)
+  const envDir = path.join(rootEnvDir, env)
 
-  const envSubDir = path.join(rootEnvDir, env)
-  const flatEnvFile = path.join(rootEnvDir, `.env.${env}`)
-
-  const isDirectoryMode =
-    fs.existsSync(envSubDir) && fs.statSync(envSubDir).isDirectory()
-  const isFlatMode = !isDirectoryMode && fs.existsSync(flatEnvFile)
-
-  if (!isDirectoryMode && !isFlatMode) {
-    throw new Error(
-      `Could not find environment '${env}': no directory '${envSubDir}' or file '${flatEnvFile}'`
-    )
+  if (!fs.existsSync(envDir) || !fs.statSync(envDir).isDirectory()) {
+    throw new Error(`Could not find environment '${env}': no directory '${envDir}'`)
   }
-
-  const envDir = isDirectoryMode ? envSubDir : rootEnvDir
 
   let envVars = ''
   envVars += `ENVELOPE_ENV=${env}\n`
@@ -113,10 +79,7 @@ async function getCompiledEnv(env: string, opts?: { silent: boolean }) {
 
   const envFiles = [
     { path: path.join(rootEnvDir, '.env'), name: 'common' },
-    {
-      path: isDirectoryMode ? path.join(envSubDir, '.env') : flatEnvFile,
-      name: env
-    }
+    { path: path.join(envDir, '.env'), name: env }
   ]
 
   for (const file of envFiles) {
@@ -234,16 +197,10 @@ export const main = defineCommand({
       run() {
         try {
           const rootEnvDir = getRootEnvDir()
-          assertSingleEnvMode(rootEnvDir)
-          const entries = fs.readdirSync(rootEnvDir, { withFileTypes: true })
-          const environments = [
-            ...entries
-              .filter((e) => e.isDirectory() && e.name !== 'node_modules')
-              .map((e) => e.name),
-            ...entries
-              .filter((e) => e.isFile() && /^\.env\../.test(e.name))
-              .map((e) => e.name.slice(5))
-          ]
+          const environments = fs
+            .readdirSync(rootEnvDir, { withFileTypes: true })
+            .filter((e) => e.isDirectory() && e.name !== 'node_modules')
+            .map((e) => e.name)
 
           log.info('Available environments: ' + environments.join(', '))
         } catch (error) {

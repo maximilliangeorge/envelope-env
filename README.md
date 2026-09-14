@@ -18,9 +18,7 @@ envelope use <environment>
 
 ## Project Structure
 
-Envelope expects your project to have an `env/` directory containing your environment configurations. Two layouts are supported, but they cannot be mixed in the same project.
-
-### Directory Mode
+Envelope expects your project to have an `env/` directory containing one subdirectory per environment.
 
 ```
 your-project/
@@ -33,19 +31,6 @@ your-project/
 │   └── production/
 │       └── .env            # Production-specific variables
 ├── .env                    # Compiled by running `envelope use <environment>`
-└── ...
-```
-
-### Flat Mode
-
-```
-your-project/
-├── env/
-│   ├── .env                 # Common variables (shared across all envs)
-│   ├── .env.development     # Development-specific variables
-│   ├── .env.staging         # Staging-specific variables
-│   └── .env.production      # Production-specific variables
-├── .env                     # Compiled by running `envelope use <environment>`
 └── ...
 ```
 
@@ -158,7 +143,7 @@ When compiling environment variables, Envelope follows this order:
 
 1. **Base variables** - `ENVELOPE_ENV` and `ENVELOPE_DIR` are always set automatically
 2. **Common variables** - From `env/.env` (if it exists)
-3. **Environment-specific variables** - From `env/<environment>/.env` or `env/.env.<environment>`
+3. **Environment-specific variables** - From `env/<environment>/.env`
 
 Environment-specific variables will override common variables with the same name.
 
